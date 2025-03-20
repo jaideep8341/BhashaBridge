@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bhasa Bridge</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            text-align: center;
+            padding: 20px;
+            transition: background 0.3s, color 0.3s;
+            background: url('https://img.freepik.com/free-photo/abstract-background-made-with-numbers_1160-206.jpg') no-repeat center center/cover;
+            color: rgb(0, 0, 0);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        .main-container {
+            display: flex;
+            width: 80%;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 20px;
+            border-radius: 15px;
+        }
+        .container,.pdf-container, .history-container {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+            flex: 1;
+            margin: 10px;
+        }
+        select, textarea, button {
+            margin: 10px;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            font-size: 16px;
+        }
+        textarea {
+            width: 80%;
+            height: 120px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 10px;
+            background: white;
+            color: black;
+        }
+        button {
+            background-color: #007BFF;
+            color: white;
+            cursor: pointer;
+            transition: 0.3s;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .dark-mode {
+            background: #222;
+            color: white;
+        }
+        .dark-mode button {
+            background-color: #555;
+        }
+        .history-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        #translated-text-container {
+    width: 80%;
+    min-height: 120px;
+    background: white;
+    color: black;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    font-size: 16px;
+    text-align: left;
+    margin: 10px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+    </style>
+</head>
+<body>
+    <h1>Welcome to Bhasa Bridge, {{ username }}!</h1>
+    <button onclick="window.location.href='/logout'">Logout</button>
+    <button onclick="toggleDarkMode()">🌙 Toggle Dark Mode</button>
+
+    <div class="main-container">
+        <div class="container">
+            <label for="source-lang">From:</label>
+            <select id="source-lang">
+                {% for code, lang in languages.items() %}
+                    <option value="{{ code }}">{{ lang }}</option>
+                {% endfor %}
+            </select>
+
+            <button onclick="swapLanguages()">🔄 Swap</button>
+
+            <label for="target-lang">To:</label>
+            <select id="target-lang">
+                {% for code, lang in languages.items() %}
+                    <option value="{{ code }}">{{ lang }}</option>
+                {% endfor %}
+            </select>
+
+            <br>
+            <textarea id="input-text" placeholder="Enter text to translate..."></textarea>
+            <button onclick="startVoiceRecognition()">🎤 Speak</button>
+        
+            <br>
+            <button onclick="translateText()">Translate</button>
+        
+            <h2>Translated Text:</h2>
+<div id="translated-text-container">
+    <p id="translated-text"></p>
+</div>
+
+
+            <h3 id="accuracy-score"></h3> <!-- Accuracy Score Display -->
+        
+            <button onclick="listenTranslation()">🔊 Listen</button>
+            <button onclick="copyText()">📋 Copy</button>
+        </div>
+        <div class="pdf-container">
+            <h2>PDF Translation</h2>
+            <form id="pdf-upload-form">
+                <input type="file" id="pdf-file" accept=".pdf" required>
+                <br>
+                <label for="pdf-target-lang">Translate To:</label>
+                <select id="pdf-target-lang">
+                    {% for code, lang in languages.items() %}
+                        <option value="{{ code }}">{{ lang }}</option>
+                    {% endfor %}
+                </select>
+                <br>
+                <button type="submit">Upload & Translate PDF</button>
+            </form>
+
+            <h3>Extracted Text:</h3>
+            <div id="extracted-text-container">
+                <p id="extracted-text"></p>
+            </div>
+
+            <h3>Translated PDF Text:</h3>
+            <div id="translated-text-container">
+                <p id="translated-pdf-text"></p>
+            </div>
+        </div>
+
+        <div class="history-container">
+            <h2>Translation History</h2>
+            <ul id="history-list"></ul>
+        </div>
+    </div>
+
+    <script>
+         document.getElementById('pdf-upload-form').addEventListener('submit', function (event) {
+            event.preventDefault();
+            
+            let formData = new FormData();
+            let fileInput = document.getElementById('pdf-file');
+            let destLang = document.getElementById('pdf-target-lang').value;
+
+            if (!fileInput.files.length) {
+                alert('Please upload a PDF file.');
+                return;
+            }
+
+            formData.append('file', fileInput.files[0]);
+            formData.append('dest_lang', destLang);
+
+            fetch('/upload-pdf', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else {
+                    document.getElementById('extracted-text').innerText = data.extracted_text;
+                    document.getElementById('translated-pdf-text').innerText = data.translated_text;
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+        function translateText() {
+            let text = document.getElementById('input-text').value;
+            let srcLang = document.getElementById('source-lang').value;
+            let destLang = document.getElementById('target-lang').value;
+
+            if (!text) {
+                alert('Please enter text to translate.');
+                return;
+            }
+
+            fetch('/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text, src_lang: srcLang, dest_lang: destLang })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.translated_text) {
+                    document.getElementById('translated-text').innerText = data.translated_text;
+                    addToHistory(text, data.translated_text);
+                    calculateTranslationAccuracy(text, data.translated_text);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function addToHistory(original, translated) {
+            let historyList = document.getElementById('history-list');
+            let listItem = document.createElement('li');
+            listItem.textContent = `${original} → ${translated}`;
+            historyList.prepend(listItem);
+        }
+
+        function calculateTranslationAccuracy(original, translated) {
+        if (!original || !translated) return;
+
+        // Normalize text: remove punctuation, convert to lowercase
+        let normalize = text => text.toLowerCase().replace(/[^\w\s]/g, '');
+        original = normalize(original);
+        translated = normalize(translated);
+
+        // Levenshtein Distance Function
+        function levenshtein(a, b) {
+            let matrix = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(null));
+
+            for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+            for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+
+            for (let i = 1; i <= a.length; i++) {
+                for (let j = 1; j <= b.length; j++) {
+                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j] + 1,    // Deletion
+                        matrix[i][j - 1] + 1,    // Insertion
+                        matrix[i - 1][j - 1] + cost // Substitution
+                    );
+                }
+            }
+            return matrix[a.length][b.length];
+        }
+
+        let distance = levenshtein(original, translated);
+        let maxLength = Math.max(original.length, translated.length);
+        let accuracy = maxLength ? ((1 - (distance / maxLength)) * 100).toFixed(2) : 0;
+
+        document.getElementById('accuracy-score').innerText = `Accuracy: ${accuracy}%`;
+    }
+
+        function swapLanguages() {
+            let srcLang = document.getElementById('source-lang').value;
+            let destLang = document.getElementById('target-lang').value;
+            let inputText = document.getElementById('input-text').value;
+            let translatedText = document.getElementById('translated-text').innerText;
+
+            document.getElementById('source-lang').value = destLang;
+            document.getElementById('target-lang').value = srcLang;
+
+            document.getElementById('input-text').value = translatedText;
+            document.getElementById('translated-text').innerText = inputText;
+        }
+
+        function startVoiceRecognition() {
+            let recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = document.getElementById('source-lang').value;
+
+            recognition.onresult = function(event) {
+                document.getElementById('input-text').value = event.results[0][0].transcript;
+            };
+
+            recognition.start();
+        }
+
+        function listenTranslation() {
+            let translatedText = document.getElementById('translated-text').innerText;
+            
+            if (!translatedText) {
+                alert('No translated text to read.');
+                return;
+            }
+
+            let speech = new SpeechSynthesisUtterance(translatedText);
+            speech.lang = document.getElementById('target-lang').value || 'en-US';
+            speech.rate = 1;
+            speech.pitch = 1;
+
+            window.speechSynthesis.speak(speech);
+        }
+
+        function copyText() {
+            let translatedText = document.getElementById('translated-text').innerText;
+            if (!translatedText) {
+                alert('No text to copy.');
+                return;
+            }
+
+            navigator.clipboard.writeText(translatedText).then(() => {
+                alert('Copied to clipboard!');
+            }).catch(err => {
+                console.error('Error copying text:', err);
+            });
+        }
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+        }
+    </script>
+</body>
+</html>
